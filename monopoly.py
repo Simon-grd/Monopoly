@@ -100,9 +100,20 @@ class Propriete(Case):
         
         if joueur.argent < prix_maison:
             return False
-        
+
+        # Check house availability in the game pool
+        jeu = getattr(plateau, 'jeu', None)
+        if jeu and getattr(jeu, 'houses_available', None) is not None:
+            if jeu.houses_available <= 0:
+                print("Aucune maison disponible dans la banque.")
+                return False
+
         joueur.payer(prix_maison, None)
         self.nb_maisons += 1
+
+        if jeu and getattr(jeu, 'houses_available', None) is not None:
+            jeu.houses_available -= 1
+
         return True
     
     def construire_hotel(self, joueur: 'Joueur', plateau: 'Plateau') -> bool:
@@ -110,13 +121,28 @@ class Propriete(Case):
         
         if self.nb_maisons < 4:
             return False
-        
+
         if joueur.argent < prix_hotel:
             return False
-        
+
+        jeu = getattr(plateau, 'jeu', None)
+        # Check hotel availability
+        if jeu and getattr(jeu, 'hotels_available', None) is not None:
+            if jeu.hotels_available <= 0:
+                print("Aucun hôtel disponible dans la banque.")
+                return False
+
         joueur.payer(prix_hotel, None)
+        # Return the 4 houses to the bank
+        if jeu and getattr(jeu, 'houses_available', None) is not None:
+            jeu.houses_available += 4
+
         self.nb_maisons = 0
         self.a_hotel = True
+
+        if jeu and getattr(jeu, 'hotels_available', None) is not None:
+            jeu.hotels_available -= 1
+
         return True
     
     def _get_prix_maison(self) -> int:
@@ -235,9 +261,11 @@ class CaseSpeciale(Case):
         elif self.type_case == "chance":
             carte = jeu.cartes_chance.piocher()
             print(f"🎰 {joueur.nom} pioche une Chance: {carte.description}")
+            carte.execute(joueur, jeu)
         elif self.type_case == "caisse":
             carte = jeu.cartes_communaute.piocher()
             print(f"🎰 {joueur.nom} pioche une Caisse: {carte.description}")
+            carte.execute(joueur, jeu)
 
 
 class Joueur:
@@ -267,12 +295,83 @@ class Joueur:
             self.argent -= montant
             if beneficiaire:
                 beneficiaire.recevoir(montant)
+            return
+
+        needed = montant - self.argent
+        # Attempt to raise funds by selling houses uniformly, then hotels, then mortgaging
+        _ = self.vendre_biens_pour(needed)
+
+        if self.argent >= montant:
+            self.argent -= montant
+            if beneficiaire:
+                beneficiaire.recevoir(montant)
         else:
+            # Pay what we can, then bankruptcy
             montant_paye = self.argent
             self.argent = 0
-            if beneficiaire:
+            if beneficiaire and montant_paye > 0:
                 beneficiaire.recevoir(montant_paye)
             self.declarer_faillite(beneficiaire)
+
+    def vendre_biens_pour(self, montant_necessaire: int) -> int:
+        montant_collecte = 0
+        jeu = getattr(self, 'jeu', None)
+
+        # 1) Sell houses uniformly across monopolies (one by one from properties with most houses)
+        from collections import defaultdict
+        quartiers = defaultdict(list)
+        for p in self.proprietes:
+            if isinstance(p, Propriete) and p.couleur not in ["gare", "service"]:
+                quartiers[p.couleur].append(p)
+
+        for couleur, props in quartiers.items():
+            if not props:
+                continue
+            # require full monopoly
+            if not props[0].est_monopole():
+                continue
+            # while there are houses and we need money
+            while any(pr.nb_maisons > 0 for pr in props) and montant_collecte < montant_necessaire:
+                prop = max(props, key=lambda x: x.nb_maisons)
+                if prop.nb_maisons <= 0:
+                    break
+                prix_maison = prop._get_prix_maison()
+                montant = prix_maison // 2
+                prop.nb_maisons -= 1
+                montant_collecte += montant
+                self.argent += montant
+                if jeu and getattr(jeu, 'houses_available', None) is not None:
+                    jeu.houses_available += 1
+                if montant_collecte >= montant_necessaire:
+                    return montant_collecte
+
+        # 2) Sell hotels
+        for prop in list(self.proprietes):
+            if montant_collecte >= montant_necessaire:
+                break
+            if isinstance(prop, Propriete) and prop.a_hotel:
+                prix_hotel = prop._get_prix_hotel()
+                montant = prix_hotel // 2
+                prop.a_hotel = False
+                montant_collecte += montant
+                self.argent += montant
+                # return 4 houses to pool
+                if jeu and getattr(jeu, 'houses_available', None) is not None:
+                    jeu.houses_available += 4
+                if jeu and getattr(jeu, 'hotels_available', None) is not None:
+                    jeu.hotels_available += 1
+
+        # 3) Mortgage remaining properties without buildings
+        for prop in list(self.proprietes):
+            if montant_collecte >= montant_necessaire:
+                break
+            if isinstance(prop, Propriete) and not prop.hypothequee and prop.nb_maisons == 0 and not prop.a_hotel:
+                montant = prop.prix // 2
+                prop.hypothequee = True
+                montant_collecte += montant
+                self.argent += montant
+
+        return montant_collecte
     
     def declarer_faillite(self, creancier: Optional['Joueur'] = None):
         self.est_en_faillite = True
@@ -378,8 +477,16 @@ class Plateau:
         return self.cases[position % len(self.cases)]
 
 class CarteCommunaute:
-    def __init__(self, description: str):
+    def __init__(self, description: str, action=None):
         self.description = description
+        self.action = action
+
+    def execute(self, joueur: 'Joueur', jeu: 'Monopoly'):
+        if callable(self.action):
+            self.action(joueur, jeu)
+        else:
+            # Default: just print description
+            print(self.description)
 
 class PaquetCartes:
     def __init__(self, type_paquet: str):
@@ -390,36 +497,165 @@ class PaquetCartes:
     
     def _creer_cartes(self):
         if self.type_paquet == "chance":
+            def avancez_depart(j, je):
+                j.position = 0
+                j.recevoir(200)
+                print(f"✓ {j.nom} avance au Départ et reçoit 200€")
+
+            def aller_gare_lyon(j, je):
+                idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Gare de Lyon')
+                j.position = idx
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} avance à {case.nom}")
+                case.action(j, je)
+
+            def aller_gare_saint_lazare(j, je):
+                idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Gare Saint-Lazare')
+                j.position = idx
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} avance à {case.nom}")
+                case.action(j, je)
+
+            def aller_electricite(j, je):
+                idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == "Compagnie d'Électricité")
+                j.position = idx
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} avance à {case.nom}")
+                # If owned, compute service rent using a dice roll
+                if case.proprietaire and case.proprietaire != j and not case.proprietaire.en_prison:
+                    import random
+                    d1 = random.randint(1,6); d2 = random.randint(1,6)
+                    l = case.calculer_loyer_service(d1, d2)
+                    print(f"→ {j.nom} paie {l}€ à {case.proprietaire.nom} (service) (dés {d1}+{d2})")
+                    j.payer(l, case.proprietaire)
+                else:
+                    case.action(j, je)
+
+            def aller_eau(j, je):
+                idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Compagnie des Eaux')
+                j.position = idx
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} avance à {case.nom}")
+                if case.proprietaire and case.proprietaire != j and not case.proprietaire.en_prison:
+                    import random
+                    d1 = random.randint(1,6); d2 = random.randint(1,6)
+                    l = case.calculer_loyer_service(d1, d2)
+                    print(f"→ {j.nom} paie {l}€ à {case.proprietaire.nom} (service) (dés {d1}+{d2})")
+                    j.payer(l, case.proprietaire)
+                else:
+                    case.action(j, je)
+
+            def vous_libere_prison(j, je):
+                j.cartes_libertes = getattr(j, 'cartes_libertes', 0) + 1
+                print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
+
+            def reculez_3(j, je):
+                j.deplacer(-3)
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} recule de 3 cases et arrive à {case.nom}")
+                case.action(j, je)
+
+            def allez_en_prison(j, je):
+                print(f"👮 {j.nom} va en prison !")
+                j.aller_en_prison()
+
+            def reparations(j, je):
+                total_houses = sum(p.nb_maisons for p in j.proprietes if isinstance(p, Propriete))
+                total_hotels = sum(1 for p in j.proprietes if isinstance(p, Propriete) and p.a_hotel)
+                montant = total_houses * 25 + total_hotels * 100
+                print(f"💸 {j.nom} paie {montant}€ pour réparations")
+                j.payer(montant, None)
+
+            def payez_50(j, je):
+                j.payer(50, None)
+
+            def recevez_50(j, je):
+                j.recevoir(50)
+
+            def avancez_champs(j, je):
+                idx = next(i for i,c in enumerate(je.plateau.cases) if c.nom == 'Avenue des Champs-Élysées')
+                j.position = idx
+                case = je.plateau.get_case(j.position)
+                print(f"→ {j.nom} avance à {case.nom}")
+                case.action(j, je)
+
+            def gagnez_200(j, je):
+                j.recevoir(200)
+                print(f"✓ {j.nom} reçoit 200€")
+
+            def payez_15(j, je):
+                j.payer(15, None)
+
             self.cartes = [
-                CarteCommunaute("Avancez au Départ (200€)"),
-                CarteCommunaute("Aller à la Gare de Lyon"),
-                CarteCommunaute("Aller à la Gare Saint-Lazare"),
-                CarteCommunaute("Aller à Électricité"),
-                CarteCommunaute("Aller à l'Eau"),
-                CarteCommunaute("Vous êtes libéré de prison"),
-                CarteCommunaute("Reculez de 3 cases"),
-                CarteCommunaute("Allez en Prison"),
-                CarteCommunaute("Faites des réparations: 25€ par maison, 100€ par hôtel"),
-                CarteCommunaute("Payez 50€ d'amende"),
-                CarteCommunaute("Recevez 50€"),
-                CarteCommunaute("Avancez jusqu'aux Champs-Élysées"),
-                CarteCommunaute("Vous avez gagné le gros lot: 200€"),
-                CarteCommunaute("Payez 15€ pour frais scolaires"),
+                CarteCommunaute("Avancez au Départ (200€)", avancez_depart),
+                CarteCommunaute("Aller à la Gare de Lyon", aller_gare_lyon),
+                CarteCommunaute("Aller à la Gare Saint-Lazare", aller_gare_saint_lazare),
+                CarteCommunaute("Aller à Électricité", aller_electricite),
+                CarteCommunaute("Aller à l'Eau", aller_eau),
+                CarteCommunaute("Vous êtes libéré de prison", vous_libere_prison),
+                CarteCommunaute("Reculez de 3 cases", reculez_3),
+                CarteCommunaute("Allez en Prison", allez_en_prison),
+                CarteCommunaute("Faites des réparations: 25€ par maison, 100€ par hôtel", reparations),
+                CarteCommunaute("Payez 50€ d'amende", payez_50),
+                CarteCommunaute("Recevez 50€", recevez_50),
+                CarteCommunaute("Avancez jusqu'aux Champs-Élysées", avancez_champs),
+                CarteCommunaute("Vous avez gagné le gros lot: 200€", gagnez_200),
+                CarteCommunaute("Payez 15€ pour frais scolaires", payez_15),
             ]
         else:
+            def avancez_depart(j, je):
+                j.position = 0
+                j.recevoir(200)
+                print(f"✓ {j.nom} avance au Départ et reçoit 200€")
+
+            def recevez_200(j, je):
+                j.recevoir(200)
+                print(f"✓ {j.nom} reçoit 200€")
+
+            def payez_50_impots(j, je):
+                j.payer(50, None)
+
+            def vous_libere_prison(j, je):
+                j.cartes_libertes = getattr(j, 'cartes_libertes', 0) + 1
+                print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
+
+            def erreur_banque(j, je):
+                j.recevoir(100)
+
+            def anniversaire(j, je):
+                montant = 10
+                for autre in je.joueurs:
+                    if autre != j and not autre.est_en_faillite:
+                        autre.payer(montant, j)
+                print(f"✓ {j.nom} reçoit 10€ de chaque joueur")
+
+            def frais_medecin(j, je):
+                j.payer(100, None)
+
+            def allez_en_prison(j, je):
+                j.aller_en_prison()
+
+            def recevez_50(j, je):
+                j.recevoir(50)
+
+            def recevez_100(j, je):
+                j.recevoir(100)
+
+            def payez_50(j, je):
+                j.payer(50, None)
+
             self.cartes = [
-                CarteCommunaute("Avancez au Départ (200€)"),
-                CarteCommunaute("Recevez 200€ d'une rente"),
-                CarteCommunaute("Payez 50€ d'impôts"),
-                CarteCommunaute("Vous êtes libéré de prison"),
-                CarteCommunaute("Recevez 100€ pour erreur de la banque"),
-                CarteCommunaute("C'est votre anniversaire: recevez 10€ de chaque joueur"),
-                CarteCommunaute("Payez 100€ pour frais de médecin"),
-                CarteCommunaute("Allez en Prison"),
-                CarteCommunaute("Vendez vos propriétés au-dessus de leur valeur"),
-                CarteCommunaute("Recevez 50€"),
-                CarteCommunaute("Recevez 100€ d'intérêts"),
-                CarteCommunaute("Payez 50€"),
+                CarteCommunaute("Avancez au Départ (200€)", avancez_depart),
+                CarteCommunaute("Recevez 200€ d'une rente", recevez_200),
+                CarteCommunaute("Payez 50€ d'impôts", payez_50_impots),
+                CarteCommunaute("Vous êtes libéré de prison", vous_libere_prison),
+                CarteCommunaute("Recevez 100€ pour erreur de la banque", erreur_banque),
+                CarteCommunaute("C'est votre anniversaire: recevez 10€ de chaque joueur", anniversaire),
+                CarteCommunaute("Payez 100€ pour frais de médecin", frais_medecin),
+                CarteCommunaute("Allez en Prison", allez_en_prison),
+                CarteCommunaute("Recevez 50€", recevez_50),
+                CarteCommunaute("Recevez 100€ d'intérêts", recevez_100),
+                CarteCommunaute("Payez 50€", payez_50),
             ]
     
     def piocher(self) -> CarteCommunaute:
@@ -437,6 +673,14 @@ class Monopoly:
         self.cartes_chance = PaquetCartes("chance")
         self.cartes_communaute = PaquetCartes("communaute")
         self.tour_numero = 0
+        # House/hotel pool according to official Monopoly (32 houses, 12 hotels)
+        self.houses_available = 32
+        self.hotels_available = 12
+        # link plateau back to game for constructions and card actions
+        self.plateau.jeu = self
+        # link each joueur back to game for liquidation and card actions
+        for j in self.joueurs:
+            j.jeu = self
     
     def lancer_des(self) -> tuple:
         de1 = random.randint(1, 6)
