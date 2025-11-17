@@ -131,7 +131,6 @@ class Plateau:
         self.cases.append(CaseSpeciale("Chance", 7, "chance"))
         self.cases.append(Propriete("Rue de Courcelles", 8, 100, 6, "bleu clair"))
         self.cases.append(Propriete("Avenue de la République", 9, 120, 8, "bleu clair"))
-        
         self.cases.append(CaseSpeciale("Prison", 10, "prison"))
         self.cases.append(Propriete("Boulevard de la Villette", 11, 140, 10, "rose"))
         self.cases.append(Propriete("Compagnie d'Électricité", 12, 150, 0, "service"))
@@ -142,7 +141,6 @@ class Plateau:
         self.cases.append(CaseSpeciale("Caisse de Communauté", 17, "caisse"))
         self.cases.append(Propriete("Boulevard Saint-Michel", 18, 180, 14, "orange"))
         self.cases.append(Propriete("Place Pigalle", 19, 200, 16, "orange"))
-        
         self.cases.append(CaseSpeciale("Parc Gratuit", 20, "parc"))
         self.cases.append(Propriete("Avenue Matignon", 21, 220, 18, "rouge"))
         self.cases.append(CaseSpeciale("Chance", 22, "chance"))
@@ -153,7 +151,6 @@ class Plateau:
         self.cases.append(Propriete("Place de la Bourse", 27, 260, 22, "jaune"))
         self.cases.append(Propriete("Compagnie des Eaux", 28, 150, 0, "service"))
         self.cases.append(Propriete("Rue La Fayette", 29, 280, 24, "jaune"))
-        
         self.cases.append(CaseSpeciale("Allez en Prison", 30, "allez_prison"))
         self.cases.append(Propriete("Avenue de Breteuil", 31, 300, 26, "vert"))
         self.cases.append(Propriete("Avenue Foch", 32, 300, 26, "vert"))
@@ -282,8 +279,129 @@ def simuler_parties(nb_parties: int, nb_joueurs: int):
     print(f"Simulation de {nb_parties} parties avec {nb_joueurs} joueurs...")
     pass
 
-if __name__ == "__main__":
-    noms = ["Alain", "Béa", "Charles"]
-    jeu = Monopoly(noms)
+class JeuTerminal:
+    def __init__(self):
+        self.jeu = None
     
-    print("Squelette de code chargé. Prêt pour le développement !")
+    def afficher_bienvenue(self):
+        print("\n" + "="*60)
+        print(" "*15 + "🎲 MONOPOLY FRANÇAIS 🎲")
+        print("="*60)
+        print("\nBienvenue au Monopoly !")
+        print("\nCommandes disponibles:")
+        print("  - 'jouer' : Lancer les dés et se déplacer")
+        print("  - 'infos' : Voir ses infos (argent, position, propriétés)")
+        print("  - 'plateau' : Voir l'état du plateau")
+        print("  - 'joueurs' : Voir les infos de tous les joueurs")
+        print("  - 'quitter' : Arrêter la partie\n")
+    
+    def afficher_plateau(self):
+        print("\n" + "-"*60)
+        print("PLATEAU")
+        print("-"*60)
+        for i, case in enumerate(self.jeu.plateau.cases):
+            propriete = ""
+            if isinstance(case, Propriete):
+                if case.proprietaire:
+                    propriete = f" [Propriétaire: {case.proprietaire.nom}]"
+                else:
+                    propriete = f" [{case.prix}€]"
+            print(f"{i:2d}: {case.nom}{propriete}")
+    
+    def afficher_infos_joueur(self, joueur):
+        print(f"\n--- Infos de {joueur.nom} ---")
+        print(f"Argent: {joueur.argent}€")
+        print(f"Position: {joueur.position} ({self.jeu.plateau.get_case(joueur.position).nom})")
+        print(f"Propriétés: {len(joueur.proprietes)}")
+        if joueur.proprietes:
+            for prop in joueur.proprietes:
+                print(f"  - {prop.nom} ({prop.prix}€)")
+        print(f"En faillite: {'OUI' if joueur.est_en_faillite else 'NON'}")
+    
+    def afficher_tous_les_joueurs(self):
+        print("\n" + "-"*60)
+        print("TOUS LES JOUEURS")
+        print("-"*60)
+        for joueur in self.jeu.joueurs:
+            statut = "EN FAILLITE" if joueur.est_en_faillite else "ACTIF"
+            print(f"{joueur.nom}: {joueur.argent}€ | {len(joueur.proprietes)} propriétés | {statut}")
+    
+    def jouer_partie(self):
+        print("\nCombien de joueurs? (2-4)")
+        while True:
+            try:
+                nb_joueurs = int(input("Nombre: "))
+                if 2 <= nb_joueurs <= 4:
+                    break
+                print("Veuillez entrer un nombre entre 2 et 4")
+            except ValueError:
+                print("Veuillez entrer un nombre valide")
+        
+        noms = []
+        for i in range(nb_joueurs):
+            nom = input(f"Nom du joueur {i+1}: ").strip()
+            if not nom:
+                nom = f"Joueur {i+1}"
+            noms.append(nom)
+        
+        self.jeu = Monopoly(noms)
+        self.afficher_bienvenue()
+        
+        tour = 0
+        while not self.jeu.partie_terminee() and tour < 100:
+            joueur_actuel = self.jeu.joueurs[self.jeu.joueur_actuel_index]
+            
+            if joueur_actuel.est_en_faillite:
+                self.jeu.joueur_actuel_index = (self.jeu.joueur_actuel_index + 1) % len(self.jeu.joueurs)
+                continue
+            
+            print(f"\n{'='*60}")
+            print(f"Tour {tour + 1} - Au tour de {joueur_actuel.nom}")
+            print(f"Argent: {joueur_actuel.argent}€ | Position: {joueur_actuel.position}")
+            print('='*60)
+            
+            commande = ""
+            while commande != "jouer":
+                commande = input("\nQue veux-tu faire? (jouer/infos/plateau/joueurs/quitter): ").lower().strip()
+                
+                if commande == "quitter":
+                    print("\nPartie annulée!")
+                    return
+                elif commande == "infos":
+                    self.afficher_infos_joueur(joueur_actuel)
+                elif commande == "plateau":
+                    self.afficher_plateau()
+                elif commande == "joueurs":
+                    self.afficher_tous_les_joueurs()
+                elif commande == "jouer":
+                    break
+                else:
+                    print("Commande inconnue!")
+            
+            print("\n🎲 Lancement des dés...")
+            input("Appuie sur Entrée...")
+            
+            de1, de2 = self.jeu.lancer_des()
+            total = de1 + de2
+            print(f"\n🎲 Résultat: {de1} + {de2} = {total}")
+            
+            self.jeu.jouer_tour(joueur_actuel)
+            
+            print("\n" + "-"*60)
+            self.afficher_infos_joueur(joueur_actuel)
+            print("-"*60)
+            
+            self.jeu.joueur_actuel_index = (self.jeu.joueur_actuel_index + 1) % len(self.jeu.joueurs)
+            tour += 1
+        
+        gagnant = self.jeu.obtenir_gagnant()
+        print(f"\n{'='*60}")
+        if gagnant:
+            print(f"🏆 {gagnant.nom} a GAGNÉ avec {gagnant.argent}€! 🏆")
+        else:
+            print(f"Partie terminée après {tour} tours")
+        print('='*60)
+
+if __name__ == "__main__":
+    jeu_terminal = JeuTerminal()
+    jeu_terminal.jouer_partie()
