@@ -20,20 +20,103 @@ class Propriete(Case):
         self.a_hotel = False
     
     def calculer_loyer(self) -> int:
+        if self.couleur == "gare":
+            nb_gares = sum(1 for p in self.proprietaire.proprietes if isinstance(p, Propriete) and p.couleur == "gare")
+            return 25 * (2 ** (nb_gares - 1))
+        elif self.couleur == "service":
+            return 0
+        
+        if self.nb_maisons == 0 and not self.a_hotel:
+            return self.loyer_base
+        elif self.nb_maisons == 1:
+            return self.loyer_base * 3
+        elif self.nb_maisons == 2:
+            return self.loyer_base * 9
+        elif self.nb_maisons == 3:
+            return self.loyer_base * 27
+        elif self.nb_maisons == 4:
+            return self.loyer_base * 84
+        elif self.a_hotel:
+            return self.loyer_base * 200
         return self.loyer_base
+    
+    def peut_construire_maison(self, joueur: 'Joueur', plateau: 'Plateau') -> bool:
+        if self.proprietaire != joueur:
+            return False
+        if self.nb_maisons >= 4:
+            return False
+        if self.couleur not in ["marron", "bleu clair", "rose", "orange", "rouge", "jaune", "vert", "bleu foncé"]:
+            return False
+        
+        couleur = self.couleur
+        proprietes_couleur = [c for c in plateau.cases if isinstance(c, Propriete) and c.couleur == couleur]
+        
+        for prop in proprietes_couleur:
+            if prop.proprietaire != joueur:
+                return False
+        
+        return True
+    
+    def construire_maison(self, joueur: 'Joueur', plateau: 'Plateau') -> bool:
+        prix_maison = self._get_prix_maison()
+        
+        if not self.peut_construire_maison(joueur, plateau):
+            return False
+        
+        if joueur.argent < prix_maison:
+            return False
+        
+        joueur.payer(prix_maison, None)
+        self.nb_maisons += 1
+        return True
+    
+    def construire_hotel(self, joueur: 'Joueur', plateau: 'Plateau') -> bool:
+        prix_hotel = self._get_prix_hotel()
+        
+        if self.nb_maisons < 4:
+            return False
+        
+        if joueur.argent < prix_hotel:
+            return False
+        
+        joueur.payer(prix_hotel, None)
+        self.nb_maisons = 0
+        self.a_hotel = True
+        return True
+    
+    def _get_prix_maison(self) -> int:
+        prix_table = {
+            "marron": 50, "bleu clair": 100, "rose": 150, "orange": 200,
+            "rouge": 200, "jaune": 300, "vert": 300, "bleu foncé": 400
+        }
+        return prix_table.get(self.couleur, 50)
+    
+    def _get_prix_hotel(self) -> int:
+        prix_table = {
+            "marron": 200, "bleu clair": 200, "rose": 300, "orange": 400,
+            "rouge": 400, "jaune": 600, "vert": 600, "bleu foncé": 800
+        }
+        return prix_table.get(self.couleur, 200)
     
     def action(self, joueur: 'Joueur', jeu: 'Monopoly'):
         if self.proprietaire is None:
             if joueur.argent >= self.prix:
-                decision = jeu.strategie.decider_achat(joueur, self)
-                if decision:
+                response = input(f"Veux-tu acheter {self.nom} pour {self.prix}€? (oui/non): ").lower().strip()
+                if response == "oui":
                     joueur.acheter_propriete(self)
                     print(f"✓ {joueur.nom} achète {self.nom} pour {self.prix}€")
+                else:
+                    print(f"✗ {joueur.nom} refuse d'acheter {self.nom}")
+            else:
+                print(f"✗ {joueur.nom} n'a pas assez d'argent pour {self.nom} ({self.prix}€)")
         elif self.proprietaire != joueur:
-            loyer = self.calculer_loyer()
-            if loyer > 0:
-                print(f"→ {joueur.nom} paie {loyer}€ à {self.proprietaire.nom} pour {self.nom}")
-                joueur.payer(loyer, self.proprietaire)
+            if self.proprietaire.en_prison:
+                print(f"→ {self.proprietaire.nom} est en prison et ne touche pas le loyer")
+            else:
+                loyer = self.calculer_loyer()
+                if loyer > 0:
+                    print(f"→ {joueur.nom} paie {loyer}€ à {self.proprietaire.nom} pour {self.nom}")
+                    joueur.payer(loyer, self.proprietaire)
 
 class CaseSpeciale(Case):
     def __init__(self, nom: str, position: int, type_case: str):
@@ -41,7 +124,27 @@ class CaseSpeciale(Case):
         self.type_case = type_case
     
     def action(self, joueur: 'Joueur', jeu: 'Monopoly'):
-        pass
+        if self.type_case == "impot":
+            montant = 200
+            print(f"💸 {joueur.nom} paie l'impôt: {montant}€")
+            joueur.payer(montant, None)
+        elif self.type_case == "taxe_luxe":
+            montant = 100
+            print(f"💸 {joueur.nom} paie la taxe de luxe: {montant}€")
+            joueur.payer(montant, None)
+        elif self.type_case == "prison":
+            if joueur.tours_en_prison == 0:
+                print(f"👮 {joueur.nom} est en visite à la prison")
+        elif self.type_case == "allez_prison":
+            print(f"👮 {joueur.nom} va en prison!")
+            joueur.aller_en_prison()
+        elif self.type_case == "depart":
+            print(f"🏁 {joueur.nom} arrive à la case Départ")
+        elif self.type_case == "parc":
+            print(f"🌳 {joueur.nom} se repose au parc gratuit")
+        elif self.type_case in ["caisse", "chance"]:
+            print(f"🎰 {joueur.nom} pioche une carte {self.type_case}")
+
 
 class Joueur:
     def __init__(self, nom: str, argent_initial: int = 1500):
@@ -96,6 +199,18 @@ class Joueur:
         self.tours_en_prison = 0
         self.doubles_consecutifs = 0
     
+    def sortir_prison(self, montant: int = 50):
+        if not self.en_prison:
+            return False
+        if self.argent < montant:
+            return False
+        self.payer(montant, None)
+        self.en_prison = False
+        return True
+    
+    def peut_sortir_prison(self) -> bool:
+        return self.en_prison and self.tours_en_prison >= 3
+    
     def recevoir(self, montant: int):
         self.argent += montant
     
@@ -125,12 +240,13 @@ class Plateau:
         self.cases.append(Propriete("Boulevard de Belleville", 1, 60, 2, "marron"))
         self.cases.append(CaseSpeciale("Caisse de Communauté", 2, "caisse"))
         self.cases.append(Propriete("Rue Lecourbe", 3, 60, 4, "marron"))
-        self.cases.append(CaseSpeciale("Impôts sur le revenu", 4, "taxe"))
+        self.cases.append(CaseSpeciale("Impôts sur le revenu", 4, "impot"))
         self.cases.append(Propriete("Gare Montparnasse", 5, 200, 25, "gare"))
         self.cases.append(Propriete("Rue de Vaugirard", 6, 100, 6, "bleu clair"))
         self.cases.append(CaseSpeciale("Chance", 7, "chance"))
         self.cases.append(Propriete("Rue de Courcelles", 8, 100, 6, "bleu clair"))
         self.cases.append(Propriete("Avenue de la République", 9, 120, 8, "bleu clair"))
+        
         self.cases.append(CaseSpeciale("Prison", 10, "prison"))
         self.cases.append(Propriete("Boulevard de la Villette", 11, 140, 10, "rose"))
         self.cases.append(Propriete("Compagnie d'Électricité", 12, 150, 0, "service"))
@@ -141,6 +257,7 @@ class Plateau:
         self.cases.append(CaseSpeciale("Caisse de Communauté", 17, "caisse"))
         self.cases.append(Propriete("Boulevard Saint-Michel", 18, 180, 14, "orange"))
         self.cases.append(Propriete("Place Pigalle", 19, 200, 16, "orange"))
+        
         self.cases.append(CaseSpeciale("Parc Gratuit", 20, "parc"))
         self.cases.append(Propriete("Avenue Matignon", 21, 220, 18, "rouge"))
         self.cases.append(CaseSpeciale("Chance", 22, "chance"))
@@ -151,6 +268,7 @@ class Plateau:
         self.cases.append(Propriete("Place de la Bourse", 27, 260, 22, "jaune"))
         self.cases.append(Propriete("Compagnie des Eaux", 28, 150, 0, "service"))
         self.cases.append(Propriete("Rue La Fayette", 29, 280, 24, "jaune"))
+        
         self.cases.append(CaseSpeciale("Allez en Prison", 30, "allez_prison"))
         self.cases.append(Propriete("Avenue de Breteuil", 31, 300, 26, "vert"))
         self.cases.append(Propriete("Avenue Foch", 32, 300, 26, "vert"))
@@ -159,7 +277,7 @@ class Plateau:
         self.cases.append(Propriete("Gare Saint-Lazare", 35, 200, 25, "gare"))
         self.cases.append(CaseSpeciale("Chance", 36, "chance"))
         self.cases.append(Propriete("Avenue des Champs-Élysées", 37, 350, 35, "bleu foncé"))
-        self.cases.append(CaseSpeciale("Taxe de Luxe", 38, "taxe"))
+        self.cases.append(CaseSpeciale("Taxe de Luxe", 38, "taxe_luxe"))
         self.cases.append(Propriete("Rue de la Paix", 39, 400, 40, "bleu foncé"))
     
     def get_case(self, position: int) -> Case:
@@ -197,13 +315,44 @@ class Monopoly:
         de2 = random.randint(1, 6)
         return de1, de2
     
-    def jouer_tour(self, joueur: Joueur):
+    def jouer_tour(self, joueur: Joueur) -> bool:
+        if joueur.en_prison:
+            print(f"\n👮 {joueur.nom} est en prison!")
+            joueur.tours_en_prison += 1
+            print(f"Tour en prison: {joueur.tours_en_prison}/3")
+            
+            if joueur.tours_en_prison < 3:
+                response = input("Veux-tu payer 50€ pour sortir? (oui/non): ").lower().strip()
+                if response == "oui":
+                    if joueur.sortir_prison():
+                        print(f"✓ {joueur.nom} sort de prison en payant 50€")
+                        joueur.en_prison = False
+                        joueur.tours_en_prison = 0
+                    else:
+                        print("Pas assez d'argent pour sortir")
+                        print(f"{joueur.nom} reste en prison")
+                        return False
+                else:
+                    print(f"{joueur.nom} reste en prison")
+                    return False
+            else:
+                print(f"✓ {joueur.nom} sort de prison après 3 tours (gratuit)")
+                joueur.en_prison = False
+                joueur.tours_en_prison = 0
+        
         print(f"\n--- Tour de {joueur.nom} ---")
         print(f"Position: {joueur.position}, Argent: {joueur.argent}€")
         
         de1, de2 = self.lancer_des()
         total = de1 + de2
         print(f"Dés: {de1} + {de2} = {total}")
+        
+        a_un_double = de1 == de2
+        
+        if joueur.tours_en_prison > 0 and a_un_double:
+            print(f"🎲 {joueur.nom} a un double en prison et sort gratuitement!")
+            joueur.en_prison = False
+            joueur.tours_en_prison = 0
         
         passage_par_depart = joueur.deplacer(total)
         if passage_par_depart:
@@ -213,16 +362,20 @@ class Monopoly:
         print(f"→ {joueur.nom} arrive à: {case_actuelle.nom}")
         case_actuelle.action(joueur, self)
         
-        if de1 == de2:
+        if a_un_double:
             joueur.doubles_consecutifs = joueur.doubles_consecutifs + 1 if hasattr(joueur, 'doubles_consecutifs') else 1
             if joueur.doubles_consecutifs >= 3:
                 print(f"⚠ {joueur.nom} a 3 doubles ! Aller en prison !")
                 joueur.aller_en_prison()
+                joueur.tours_en_prison = 0
+                return False
             else:
-                print(f"🎲 {joueur.nom} a un double ! Relancer !")
-                self.jouer_tour(joueur)
+                print(f"🎲 {joueur.nom} a un double ! Rejeu!")
+                return True
         else:
             joueur.doubles_consecutifs = 0 if hasattr(joueur, 'doubles_consecutifs') else 0
+            return False
+
     
     def partie_terminee(self) -> bool:
         joueurs_actifs = [j for j in self.joueurs if not j.est_en_faillite]
@@ -290,33 +443,104 @@ class JeuTerminal:
         print("\nBienvenue au Monopoly !")
         print("\nCommandes disponibles:")
         print("  - 'jouer' : Lancer les dés et se déplacer")
+        print("  - 'construire' : Construire une maison/hôtel")
         print("  - 'infos' : Voir ses infos (argent, position, propriétés)")
         print("  - 'plateau' : Voir l'état du plateau")
         print("  - 'joueurs' : Voir les infos de tous les joueurs")
         print("  - 'quitter' : Arrêter la partie\n")
     
+    def construire_maison(self, joueur):
+        proprietes_constructibles = []
+        for prop in joueur.proprietes:
+            if isinstance(prop, Propriete) and prop.peut_construire_maison(joueur, self.jeu.plateau):
+                if not prop.a_hotel:
+                    proprietes_constructibles.append(prop)
+        
+        if not proprietes_constructibles:
+            print("Aucune propriété constructible!")
+            return
+        
+        print("\nPropriétés constructibles:")
+        for i, prop in enumerate(proprietes_constructibles):
+            prix_maison = prop._get_prix_maison()
+            prix_hotel = prop._get_prix_hotel()
+            status = ""
+            if prop.nb_maisons > 0:
+                status = f" ({prop.nb_maisons} maisons, {prix_hotel}€ pour hôtel)"
+            else:
+                status = f" (maison: {prix_maison}€)"
+            print(f"  {i+1}. {prop.nom}{status}")
+        
+        try:
+            choix = int(input("Choix (numéro ou 0 pour annuler): "))
+            if choix == 0:
+                return
+            prop = proprietes_constructibles[choix - 1]
+            
+            if prop.nb_maisons < 4:
+                prix_maison = prop._get_prix_maison()
+                response = input(f"Construire une maison ({prix_maison}€)? (oui/non): ").lower().strip()
+                if response == "oui":
+                    if prop.construire_maison(joueur, self.jeu.plateau):
+                        print(f"✓ Maison construite sur {prop.nom}")
+                    else:
+                        print("Impossible de construire")
+            else:
+                prix_hotel = prop._get_prix_hotel()
+                response = input(f"Construire un hôtel ({prix_hotel}€)? (oui/non): ").lower().strip()
+                if response == "oui":
+                    if prop.construire_hotel(joueur, self.jeu.plateau):
+                        print(f"✓ Hôtel construit sur {prop.nom}")
+                    else:
+                        print("Impossible de construire")
+        except (ValueError, IndexError):
+            print("Choix invalide")
+
+    
     def afficher_plateau(self):
-        print("\n" + "-"*60)
+        print("\n" + "-"*80)
         print("PLATEAU")
-        print("-"*60)
+        print("-"*80)
         for i, case in enumerate(self.jeu.plateau.cases):
-            propriete = ""
+            proprietaire = ""
+            batiments = ""
             if isinstance(case, Propriete):
                 if case.proprietaire:
-                    propriete = f" [Propriétaire: {case.proprietaire.nom}]"
+                    proprietaire = f" [{case.proprietaire.nom}]"
+                    if case.a_hotel:
+                        batiments = " 🏨"
+                    elif case.nb_maisons > 0:
+                        batiments = " " + "🏠" * case.nb_maisons
                 else:
-                    propriete = f" [{case.prix}€]"
-            print(f"{i:2d}: {case.nom}{propriete}")
+                    proprietaire = f" [{case.prix}€]"
+            print(f"{i:2d}: {case.nom:<35}{proprietaire:<25}{batiments}")
+
     
     def afficher_infos_joueur(self, joueur):
         print(f"\n--- Infos de {joueur.nom} ---")
         print(f"Argent: {joueur.argent}€")
-        print(f"Position: {joueur.position} ({self.jeu.plateau.get_case(joueur.position).nom})")
+        pos_case = self.jeu.plateau.get_case(joueur.position)
+        print(f"Position: {joueur.position} ({pos_case.nom})")
+        
+        if joueur.en_prison:
+            print(f"Status: 👮 EN PRISON (tour {joueur.tours_en_prison}/3)")
+        else:
+            print(f"Status: LIBRE")
+        
         print(f"Propriétés: {len(joueur.proprietes)}")
         if joueur.proprietes:
             for prop in joueur.proprietes:
-                print(f"  - {prop.nom} ({prop.prix}€)")
+                batiments = ""
+                if isinstance(prop, Propriete):
+                    if prop.a_hotel:
+                        batiments = " 🏨"
+                    elif prop.nb_maisons > 0:
+                        batiments = " " + "🏠" * prop.nb_maisons
+                    loyer = prop.calculer_loyer()
+                    print(f"  - {prop.nom} ({prop.prix}€, loyer: {loyer}€){batiments}")
+        
         print(f"En faillite: {'OUI' if joueur.est_en_faillite else 'NON'}")
+
     
     def afficher_tous_les_joueurs(self):
         print("\n" + "-"*60)
@@ -355,41 +579,41 @@ class JeuTerminal:
                 self.jeu.joueur_actuel_index = (self.jeu.joueur_actuel_index + 1) % len(self.jeu.joueurs)
                 continue
             
-            print(f"\n{'='*60}")
-            print(f"Tour {tour + 1} - Au tour de {joueur_actuel.nom}")
-            print(f"Argent: {joueur_actuel.argent}€ | Position: {joueur_actuel.position}")
-            print('='*60)
-            
-            commande = ""
-            while commande != "jouer":
-                commande = input("\nQue veux-tu faire? (jouer/infos/plateau/joueurs/quitter): ").lower().strip()
+            rejeu = True
+            while rejeu:
+                print(f"\n{'='*60}")
+                print(f"Au tour de {joueur_actuel.nom}")
+                print(f"Argent: {joueur_actuel.argent}€ | Position: {joueur_actuel.position}")
+                print('='*60)
                 
-                if commande == "quitter":
-                    print("\nPartie annulée!")
-                    return
-                elif commande == "infos":
-                    self.afficher_infos_joueur(joueur_actuel)
-                elif commande == "plateau":
-                    self.afficher_plateau()
-                elif commande == "joueurs":
-                    self.afficher_tous_les_joueurs()
-                elif commande == "jouer":
-                    break
-                else:
-                    print("Commande inconnue!")
-            
-            print("\n🎲 Lancement des dés...")
-            input("Appuie sur Entrée...")
-            
-            de1, de2 = self.jeu.lancer_des()
-            total = de1 + de2
-            print(f"\n🎲 Résultat: {de1} + {de2} = {total}")
-            
-            self.jeu.jouer_tour(joueur_actuel)
-            
-            print("\n" + "-"*60)
-            self.afficher_infos_joueur(joueur_actuel)
-            print("-"*60)
+                commande = ""
+                while commande != "jouer":
+                    commande = input("\nQue veux-tu faire? (jouer/construire/infos/plateau/joueurs/quitter): ").lower().strip()
+                    
+                    if commande == "quitter":
+                        print("\nPartie annulée!")
+                        return
+                    elif commande == "construire":
+                        self.construire_maison(joueur_actuel)
+                    elif commande == "infos":
+                        self.afficher_infos_joueur(joueur_actuel)
+                    elif commande == "plateau":
+                        self.afficher_plateau()
+                    elif commande == "joueurs":
+                        self.afficher_tous_les_joueurs()
+                    elif commande == "jouer":
+                        break
+                    else:
+                        print("Commande inconnue!")
+                
+                print("\n🎲 Lancement des dés...")
+                input("Appuie sur Entrée...")
+                
+                rejeu = self.jeu.jouer_tour(joueur_actuel)
+                
+                print("\n" + "-"*60)
+                self.afficher_infos_joueur(joueur_actuel)
+                print("-"*60)
             
             self.jeu.joueur_actuel_index = (self.jeu.joueur_actuel_index + 1) % len(self.jeu.joueurs)
             tour += 1
