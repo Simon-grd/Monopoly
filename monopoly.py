@@ -18,8 +18,11 @@ class Propriete(Case):
         self.proprietaire: Optional['Joueur'] = None
         self.nb_maisons = 0
         self.a_hotel = False
+        self.hypothequee = False
     
     def calculer_loyer(self) -> int:
+        if self.hypothequee:
+            return 0
         if self.couleur == "gare":
             nb_gares = sum(1 for p in self.proprietaire.proprietes if isinstance(p, Propriete) and p.couleur == "gare")
             return 25 * (2 ** (nb_gares - 1))
@@ -27,7 +30,10 @@ class Propriete(Case):
             return 0
         
         if self.nb_maisons == 0 and not self.a_hotel:
-            return self.loyer_base
+            loyer = self.loyer_base
+            if self.est_monopole():
+                loyer *= 2
+            return loyer
         elif self.nb_maisons == 1:
             return self.loyer_base * 3
         elif self.nb_maisons == 2:
@@ -39,6 +45,27 @@ class Propriete(Case):
         elif self.a_hotel:
             return self.loyer_base * 200
         return self.loyer_base
+    
+    def est_monopole(self) -> bool:
+        if not self.proprietaire or self.couleur in ["gare", "service"]:
+            return False
+        couleurs_map = {
+            "marron": ["Boulevard de Belleville", "Rue Lecourbe"],
+            "bleu clair": ["Rue de Vaugirard", "Rue de Courcelles", "Avenue de la République"],
+            "rose": ["Rue de Paradis", "Avenue de Neuilly", "Rue de la Fayette"],
+            "orange": ["Place de la Bourse", "Faubourg Saint-Honoré", "Rue La Fayette"],
+            "rouge": ["Avenue Matignon", "Boulevard Malesherbes", "Avenue Henri-Martin"],
+            "jaune": ["Avenue de Breteuil", "Avenue Foch", "Boulevard des Capucines"],
+            "vert": ["Rue de la Paix", "Avenue des Champs-Élysées"],
+            "bleu foncé": ["Boulevard de la Villette", "Place Pigalle"]
+        }
+        
+        if self.couleur not in couleurs_map:
+            return False
+        
+        proprietes_couleur = [p for p in self.proprietaire.proprietes 
+                             if isinstance(p, Propriete) and p.couleur == self.couleur]
+        return len(proprietes_couleur) == len(couleurs_map[self.couleur])
     
     def peut_construire_maison(self, joueur: 'Joueur', plateau: 'Plateau') -> bool:
         if self.proprietaire != joueur:
@@ -61,6 +88,14 @@ class Propriete(Case):
         prix_maison = self._get_prix_maison()
         
         if not self.peut_construire_maison(joueur, plateau):
+            return False
+        
+        couleur = self.couleur
+        proprietes_couleur = [c for c in plateau.cases if isinstance(c, Propriete) and c.couleur == couleur]
+        
+        max_maisons = max(p.nb_maisons for p in proprietes_couleur) if proprietes_couleur else 0
+        if self.nb_maisons < max_maisons:
+            print(f"Construction uniforme requise! Toutes les propriétés {couleur} doivent avoir le même nombre de maisons.")
             return False
         
         if joueur.argent < prix_maison:
@@ -97,6 +132,61 @@ class Propriete(Case):
             "rouge": 400, "jaune": 600, "vert": 600, "bleu foncé": 800
         }
         return prix_table.get(self.couleur, 200)
+    
+    def hypothequer(self, joueur: 'Joueur') -> bool:
+        if self.proprietaire != joueur:
+            print("Tu ne peux pas hypothéquer une propriété qui ne t'appartient pas!")
+            return False
+        if self.hypothequee:
+            print(f"{self.nom} est déjà hypothéquée!")
+            return False
+        if self.nb_maisons > 0 or self.a_hotel:
+            print("Tu dois d'abord enlever toutes les maisons et hôtels!")
+            return False
+        
+        montant = self.prix // 2
+        joueur.recevoir(montant)
+        self.hypothequee = True
+        print(f"✓ {self.nom} est hypothéquée pour {montant}€")
+        return True
+    
+    def lever_hypotheque(self, joueur: 'Joueur') -> bool:
+        if self.proprietaire != joueur:
+            print("Tu ne peux pas lever l'hypothèque d'une propriété qui ne t'appartient pas!")
+            return False
+        if not self.hypothequee:
+            print(f"{self.nom} n'est pas hypothéquée!")
+            return False
+        
+        montant = int(self.prix // 2 * 1.1)
+        if joueur.argent < montant:
+            print(f"Tu n'as pas assez d'argent pour lever l'hypothèque ({montant}€)!")
+            return False
+        
+        joueur.payer(montant, None)
+        self.hypothequee = False
+        print(f"✓ Hypothèque sur {self.nom} levée ({montant}€)")
+        return True
+    
+    def vendre_a_joueur(self, acheteur: 'Joueur', prix: int) -> bool:
+        if acheteur.argent < prix:
+            print(f"{acheteur.nom} n'a pas assez d'argent!")
+            return False
+        acheteur.payer(prix, self.proprietaire)
+        acheteur.proprietes.append(self)
+        self.proprietaire.proprietes.remove(self)
+        self.proprietaire = acheteur
+        print(f"✓ {acheteur.nom} a acheté {self.nom} à {self.proprietaire.nom} pour {prix}€")
+        return True
+    
+    def calculer_loyer_service(self, de1: int, de2: int) -> int:
+        nb_services = sum(1 for p in self.proprietaire.proprietes if isinstance(p, Propriete) and p.couleur == "service")
+        total_des = de1 + de2
+        if nb_services == 1:
+            return total_des * 4
+        elif nb_services == 2:
+            return total_des * 10
+        return 0
     
     def action(self, joueur: 'Joueur', jeu: 'Monopoly'):
         if self.proprietaire is None:
@@ -142,8 +232,12 @@ class CaseSpeciale(Case):
             print(f"🏁 {joueur.nom} arrive à la case Départ")
         elif self.type_case == "parc":
             print(f"🌳 {joueur.nom} se repose au parc gratuit")
-        elif self.type_case in ["caisse", "chance"]:
-            print(f"🎰 {joueur.nom} pioche une carte {self.type_case}")
+        elif self.type_case == "chance":
+            carte = jeu.cartes_chance.piocher()
+            print(f"🎰 {joueur.nom} pioche une Chance: {carte.description}")
+        elif self.type_case == "caisse":
+            carte = jeu.cartes_communaute.piocher()
+            print(f"🎰 {joueur.nom} pioche une Caisse: {carte.description}")
 
 
 class Joueur:
@@ -284,21 +378,56 @@ class Plateau:
         return self.cases[position % len(self.cases)]
 
 class CarteCommunaute:
-    def __init__(self, description: str, action):
+    def __init__(self, description: str):
         self.description = description
-        self.action = action
 
 class PaquetCartes:
     def __init__(self, type_paquet: str):
         self.type_paquet = type_paquet
         self.cartes: List[CarteCommunaute] = []
+        self.index_courant = 0
         self._creer_cartes()
     
     def _creer_cartes(self):
-        pass
+        if self.type_paquet == "chance":
+            self.cartes = [
+                CarteCommunaute("Avancez au Départ (200€)"),
+                CarteCommunaute("Aller à la Gare de Lyon"),
+                CarteCommunaute("Aller à la Gare Saint-Lazare"),
+                CarteCommunaute("Aller à Électricité"),
+                CarteCommunaute("Aller à l'Eau"),
+                CarteCommunaute("Vous êtes libéré de prison"),
+                CarteCommunaute("Reculez de 3 cases"),
+                CarteCommunaute("Allez en Prison"),
+                CarteCommunaute("Faites des réparations: 25€ par maison, 100€ par hôtel"),
+                CarteCommunaute("Payez 50€ d'amende"),
+                CarteCommunaute("Recevez 50€"),
+                CarteCommunaute("Avancez jusqu'aux Champs-Élysées"),
+                CarteCommunaute("Vous avez gagné le gros lot: 200€"),
+                CarteCommunaute("Payez 15€ pour frais scolaires"),
+            ]
+        else:
+            self.cartes = [
+                CarteCommunaute("Avancez au Départ (200€)"),
+                CarteCommunaute("Recevez 200€ d'une rente"),
+                CarteCommunaute("Payez 50€ d'impôts"),
+                CarteCommunaute("Vous êtes libéré de prison"),
+                CarteCommunaute("Recevez 100€ pour erreur de la banque"),
+                CarteCommunaute("C'est votre anniversaire: recevez 10€ de chaque joueur"),
+                CarteCommunaute("Payez 100€ pour frais de médecin"),
+                CarteCommunaute("Allez en Prison"),
+                CarteCommunaute("Vendez vos propriétés au-dessus de leur valeur"),
+                CarteCommunaute("Recevez 50€"),
+                CarteCommunaute("Recevez 100€ d'intérêts"),
+                CarteCommunaute("Payez 50€"),
+            ]
     
     def piocher(self) -> CarteCommunaute:
-        pass
+        if self.index_courant >= len(self.cartes):
+            self.index_courant = 0
+        carte = self.cartes[self.index_courant]
+        self.index_courant += 1
+        return carte
 
 class Monopoly:
     def __init__(self, noms_joueurs: List[str]):
@@ -308,12 +437,50 @@ class Monopoly:
         self.cartes_chance = PaquetCartes("chance")
         self.cartes_communaute = PaquetCartes("communaute")
         self.tour_numero = 0
-        self.strategie = IAAgressive()
     
     def lancer_des(self) -> tuple:
         de1 = random.randint(1, 6)
         de2 = random.randint(1, 6)
         return de1, de2
+    
+    def faire_encheres(self, propriete: Propriete):
+        print(f"\n🏷️ Enchères pour {propriete.nom}")
+        encheres = {}
+        prix_actuel = 0
+        
+        for joueur in self.joueurs:
+            if joueur.est_en_faillite or joueur.argent == 0:
+                continue
+            
+            while True:
+                try:
+                    encheres_str = input(f"{joueur.nom}, enchères (minimum {prix_actuel + 10}€, ou 0 pour passer): ")
+                    encheres_int = int(encheres_str)
+                    
+                    if encheres_int == 0:
+                        break
+                    if encheres_int <= prix_actuel:
+                        print(f"Enchères trop basses! Minimum: {prix_actuel + 10}€")
+                        continue
+                    if encheres_int > joueur.argent:
+                        print(f"Tu n'as que {joueur.argent}€!")
+                        continue
+                    
+                    encheres[joueur] = encheres_int
+                    prix_actuel = encheres_int
+                    break
+                except ValueError:
+                    print("Entre un nombre valide!")
+        
+        if encheres:
+            gagnant = max(encheres.items(), key=lambda x: x[1])
+            gagnant[0].payer(gagnant[1], None)
+            gagnant[0].proprietes.append(propriete)
+            propriete.proprietaire = gagnant[0]
+            print(f"✓ {gagnant[0].nom} remporte les enchères pour {gagnant[1]}€!")
+        else:
+            print("Aucune enchère. La propriété reste libre.")
+    
     
     def jouer_tour(self, joueur: Joueur) -> bool:
         if joueur.en_prison:
@@ -405,33 +572,6 @@ class Monopoly:
         else:
             print(f"\nPartie terminée après {max_tours} tours (limite atteinte)")
 
-class StrategieIA:
-    def decider_achat(self, joueur: Joueur, propriete: Propriete) -> bool:
-        return False
-    
-    def decider_construction(self, joueur: Joueur, proprietes_quartier: List[Propriete]) -> Optional[Propriete]:
-        return None
-
-class IAAgressive(StrategieIA):
-    def decider_achat(self, joueur: Joueur, propriete: Propriete) -> bool:
-        return joueur.argent >= propriete.prix
-
-class StatistiquesPartie:
-    def __init__(self):
-        self.passages_par_case = {}
-        self.revenus_par_propriete = {}
-        self.duree_partie = 0
-    
-    def enregistrer_passage(self, case: Case):
-        pass
-    
-    def afficher_statistiques(self):
-        pass
-
-def simuler_parties(nb_parties: int, nb_joueurs: int):
-    print(f"Simulation de {nb_parties} parties avec {nb_joueurs} joueurs...")
-    pass
-
 class JeuTerminal:
     def __init__(self):
         self.jeu = None
@@ -493,6 +633,30 @@ class JeuTerminal:
                         print(f"✓ Hôtel construit sur {prop.nom}")
                     else:
                         print("Impossible de construire")
+        except (ValueError, IndexError):
+            print("Choix invalide")
+    
+    def hypothequer_propriete(self, joueur):
+        proprietes_hypothecables = []
+        for prop in joueur.proprietes:
+            if isinstance(prop, Propriete) and not prop.hypothequee and prop.nb_maisons == 0 and not prop.a_hotel:
+                proprietes_hypothecables.append(prop)
+        
+        if not proprietes_hypothecables:
+            print("Aucune propriété à hypothéquer!")
+            return
+        
+        print("\nPropriétés à hypothéquer:")
+        for i, prop in enumerate(proprietes_hypothecables):
+            montant = prop.prix // 2
+            print(f"  {i+1}. {prop.nom} ({montant}€ reçus)")
+        
+        try:
+            choix = int(input("Choix (numéro ou 0 pour annuler): "))
+            if choix == 0:
+                return
+            prop = proprietes_hypothecables[choix - 1]
+            prop.hypothequer(joueur)
         except (ValueError, IndexError):
             print("Choix invalide")
 
@@ -588,13 +752,15 @@ class JeuTerminal:
                 
                 commande = ""
                 while commande != "jouer":
-                    commande = input("\nQue veux-tu faire? (jouer/construire/infos/plateau/joueurs/quitter): ").lower().strip()
+                    commande = input("\nQue veux-tu faire? (jouer/construire/hypothequer/infos/plateau/joueurs/quitter): ").lower().strip()
                     
                     if commande == "quitter":
                         print("\nPartie annulée!")
                         return
                     elif commande == "construire":
                         self.construire_maison(joueur_actuel)
+                    elif commande == "hypothequer":
+                        self.hypothequer_propriete(joueur_actuel)
                     elif commande == "infos":
                         self.afficher_infos_joueur(joueur_actuel)
                     elif commande == "plateau":
