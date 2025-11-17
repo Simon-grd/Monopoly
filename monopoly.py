@@ -527,7 +527,19 @@ class Monopoly:
         
         case_actuelle = self.plateau.get_case(joueur.position)
         print(f"→ {joueur.nom} arrive à: {case_actuelle.nom}")
-        case_actuelle.action(joueur, self)
+        if isinstance(case_actuelle, Propriete) and case_actuelle.couleur == "service":
+            if case_actuelle.proprietaire is None:
+                case_actuelle.action(joueur, self)
+            elif case_actuelle.proprietaire != joueur:
+                if case_actuelle.proprietaire.en_prison:
+                    print(f"→ {case_actuelle.proprietaire.nom} est en prison et ne touche pas le loyer")
+                else:
+                    loyer_service = case_actuelle.calculer_loyer_service(de1, de2)
+                    if loyer_service > 0:
+                        print(f"→ {joueur.nom} paie {loyer_service}€ à {case_actuelle.proprietaire.nom} pour {case_actuelle.nom} (service)")
+                        joueur.payer(loyer_service, case_actuelle.proprietaire)
+        else:
+            case_actuelle.action(joueur, self)
         
         if a_un_double:
             joueur.doubles_consecutifs = joueur.doubles_consecutifs + 1 if hasattr(joueur, 'doubles_consecutifs') else 1
