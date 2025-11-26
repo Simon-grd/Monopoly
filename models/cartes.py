@@ -80,7 +80,7 @@ class PaquetCartes:
                 case.action(j, je)
 
         def vous_libere_prison(j, je):
-            j.cartes_libertes = getattr(j, 'cartes_libertes', 0) + 1
+            j.cartes_liberte += 1
             print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
 
         def reculez_3(j, je):
@@ -152,7 +152,7 @@ class PaquetCartes:
             j.payer(50, None)
 
         def vous_libere_prison(j, je):
-            j.cartes_libertes = getattr(j, 'cartes_libertes', 0) + 1
+            j.cartes_liberte += 1
             print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
 
         def erreur_banque(j, je):

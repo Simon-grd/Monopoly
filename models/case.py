@@ -255,7 +255,8 @@ class CaseSpeciale(Case):
             print(f"👮 {joueur.nom} va en prison!")
             joueur.aller_en_prison()
         elif self.type_case == "depart":
-            print(f"🏁 {joueur.nom} arrive à la case Départ")
+            print(f"🏁 {joueur.nom} arrive à la case Départ et reçoit 200€ bonus!")
+            joueur.recevoir(200)
         elif self.type_case == "parc":
             print(f"🌳 {joueur.nom} se repose au parc gratuit")
         elif self.type_case == "chance":

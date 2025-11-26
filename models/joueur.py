@@ -14,6 +14,7 @@ class Joueur:
         self.tours_en_prison = 0
         self.est_en_faillite = False
         self.doubles_consecutifs = 0
+        self.cartes_liberte = 0
     
     def deplacer(self, nombre_cases: int, plateau_taille: int = 40) -> bool:
         ancienne_position = self.position
@@ -130,7 +131,12 @@ class Joueur:
             return False
         self.payer(montant, None)
         self.en_prison = False
+        self.tours_en_prison = 0
         return True
+    
+    def sortir_de_prison(self):
+        self.en_prison = False
+        self.tours_en_prison = 0
     
     def peut_sortir_prison(self) -> bool:
         return self.en_prison and self.tours_en_prison >= 3

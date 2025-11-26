@@ -5,6 +5,7 @@ from models.joueur import Joueur
 from models.plateau import Plateau
 from models.cartes import PaquetCartes
 from models.case import Propriete
+from models.compagnie import Compagnie
 
 class Monopoly:
     def __init__(self, noms_joueurs: List[str]):
@@ -16,6 +17,7 @@ class Monopoly:
         self.tour_numero = 0
         self.houses_available = 32
         self.hotels_available = 12
+        self.dernier_total_des = 0
         self.plateau.jeu = self
         for j in self.joueurs:
             j.jeu = self
@@ -63,36 +65,67 @@ class Monopoly:
         else:
             print("Aucune enchère. La propriété reste libre.")
     
+    def _gerer_prison(self, joueur: Joueur) -> bool:
+        print(f"\n👮 {joueur.nom} est en prison!")
+        joueur.tours_en_prison += 1
+        print(f"Tour en prison: {joueur.tours_en_prison}/3")
+        
+        # Option 1: Carte libération
+        if joueur.cartes_liberte > 0:
+            response = input("Utiliser une carte 'Sortir de prison'? (oui/non): ").lower().strip()
+            if response == "oui":
+                joueur.cartes_liberte -= 1
+                joueur.sortir_de_prison()
+                print(f"✓ {joueur.nom} utilise une carte et sort de prison!")
+                return True
+        
+        # Option 2: Payer 50€
+        if joueur.argent >= 50:
+            response = input("Payer 50€ pour sortir? (oui/non): ").lower().strip()
+            if response == "oui":
+                joueur.payer(50, None)
+                joueur.sortir_de_prison()
+                print(f"✓ {joueur.nom} paie 50€ et sort de prison")
+                return True
+        
+        # Option 3: Tenter un double
+        de1, de2 = self.lancer_des()
+        self.dernier_total_des = de1 + de2
+        print(f"🎲 Tentative: {de1} et {de2}")
+        
+        if de1 == de2:
+            print("✓ Double! Sortie de prison!")
+            joueur.sortir_de_prison()
+            joueur.deplacer(de1 + de2)
+            case = self.plateau.get_case(joueur.position)
+            print(f"→ {joueur.nom} arrive à: {case.nom}")
+            case.action(joueur, self)
+            return False
+        elif joueur.tours_en_prison >= 3:
+            print("✓ Sortie forcée (50€)")
+            joueur.payer(50, None)
+            joueur.sortir_de_prison()
+            joueur.deplacer(de1 + de2)
+            case = self.plateau.get_case(joueur.position)
+            print(f"→ {joueur.nom} arrive à: {case.nom}")
+            case.action(joueur, self)
+            return False
+        else:
+            print("❌ Reste en prison")
+            return False
+    
     def jouer_tour(self, joueur: Joueur) -> bool:
         if joueur.en_prison:
-            print(f"\n👮 {joueur.nom} est en prison!")
-            joueur.tours_en_prison += 1
-            print(f"Tour en prison: {joueur.tours_en_prison}/3")
-            
-            if joueur.tours_en_prison < 3:
-                response = input("Veux-tu payer 50€ pour sortir? (oui/non): ").lower().strip()
-                if response == "oui":
-                    if joueur.sortir_prison():
-                        print(f"✓ {joueur.nom} sort de prison en payant 50€")
-                        joueur.en_prison = False
-                        joueur.tours_en_prison = 0
-                    else:
-                        print("Pas assez d'argent pour sortir")
-                        print(f"{joueur.nom} reste en prison")
-                        return False
-                else:
-                    print(f"{joueur.nom} reste en prison")
-                    return False
-            else:
-                print(f"✓ {joueur.nom} sort de prison après 3 tours (gratuit)")
-                joueur.en_prison = False
-                joueur.tours_en_prison = 0
+            self._gerer_prison(joueur)
+            if joueur.en_prison:
+                return False
         
         print(f"\n--- Tour de {joueur.nom} ---")
         print(f"Position: {joueur.position}, Argent: {joueur.argent}€")
         
         de1, de2 = self.lancer_des()
         total = de1 + de2
+        self.dernier_total_des = total
         print(f"Dés: {de1} + {de2} = {total}")
         
         a_un_double = de1 == de2
@@ -109,19 +142,7 @@ class Monopoly:
         case_actuelle = self.plateau.get_case(joueur.position)
         print(f"→ {joueur.nom} arrive à: {case_actuelle.nom}")
         
-        if isinstance(case_actuelle, Propriete) and case_actuelle.couleur == "service":
-            if case_actuelle.proprietaire is None:
-                case_actuelle.action(joueur, self)
-            elif case_actuelle.proprietaire != joueur:
-                if case_actuelle.proprietaire.en_prison:
-                    print(f"→ {case_actuelle.proprietaire.nom} est en prison et ne touche pas le loyer")
-                else:
-                    loyer_service = case_actuelle.calculer_loyer_service(de1, de2)
-                    if loyer_service > 0:
-                        print(f"→ {joueur.nom} paie {loyer_service}€ à {case_actuelle.proprietaire.nom} pour {case_actuelle.nom} (service)")
-                        joueur.payer(loyer_service, case_actuelle.proprietaire)
-        else:
-            case_actuelle.action(joueur, self)
+        case_actuelle.action(joueur, self)
         
         if a_un_double:
             joueur.doubles_consecutifs = joueur.doubles_consecutifs + 1 if hasattr(joueur, 'doubles_consecutifs') else 1
@@ -145,7 +166,24 @@ class Monopoly:
         joueurs_actifs = [j for j in self.joueurs if not j.est_en_faillite]
         return joueurs_actifs[0] if len(joueurs_actifs) == 1 else None
     
-    def jouer_partie(self, max_tours: int = 200):
+    def _afficher_resultat_final(self):
+        gagnant = self.obtenir_gagnant()
+        print(f"\n{'='*60}")
+        if gagnant:
+            print(f"🏆 {gagnant.nom} a GAGNÉ avec {gagnant.argent}€!")
+            print(f"Propriétés: {len(gagnant.proprietes)}")
+            for prop in gagnant.proprietes:
+                print(f"  - {prop.nom}")
+        else:
+            print(f"Limite de {self.tour_numero} tours atteinte")
+            print("\nClassement par argent:")
+            classement = sorted(self.joueurs, key=lambda j: j.argent, reverse=True)
+            for i, j in enumerate(classement, 1):
+                statut = "FAILLITE" if j.est_en_faillite else "ACTIF"
+                print(f"{i}. {j.nom}: {j.argent}€ ({len(j.proprietes)} propriétés) - {statut}")
+        print('='*60)
+    
+    def jouer_partie(self, max_tours: int = 200, mode_interactif: bool = False):
         print("=== DÉBUT DE LA PARTIE ===\n")
         
         while not self.partie_terminee() and self.tour_numero < max_tours:
@@ -154,13 +192,17 @@ class Monopoly:
             if not joueur.est_en_faillite:
                 self.jouer_tour(joueur)
             
+            if mode_interactif:
+                input("\n[Appuyez sur Entrée...]")
+            
             self.joueur_actuel_index = (self.joueur_actuel_index + 1) % len(self.joueurs)
             
             if self.joueur_actuel_index == 0:
                 self.tour_numero += 1
+                if self.tour_numero % 10 == 0:
+                    actifs = sum(1 for j in self.joueurs if not j.est_en_faillite)
+                    faillites = len(self.joueurs) - actifs
+                    print(f"\n--- Tour {self.tour_numero}: {actifs} actifs, {faillites} en faillite ---")
         
-        gagnant = self.obtenir_gagnant()
-        if gagnant:
-            print(f"\n🎉 {gagnant.nom} a gagné avec {gagnant.argent}€ !")
-        else:
-            print(f"\nPartie terminée après {max_tours} tours (limite atteinte)")
+        self._afficher_resultat_final()
+        return self.obtenir_gagnant()
