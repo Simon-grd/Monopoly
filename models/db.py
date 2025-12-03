@@ -1,5 +1,11 @@
-import mysql.connector
-from typing import List, Optional
+from typing import List
+
+try:
+    import mysql.connector  # type: ignore
+    MYSQL_AVAILABLE = True
+except ImportError:
+    MYSQL_AVAILABLE = False
+
 from models.case import Propriete
 from models.gare import Gare
 from models.compagnie import Compagnie
@@ -7,15 +13,35 @@ from models.compagnie import Compagnie
 class DB:
     @classmethod
     def connexionBase(cls):
+        if not MYSQL_AVAILABLE:
+            return None
         mydb = mysql.connector.connect(
-          host="localhost",
-          user="mmaldo",
-          password="aDHp8P6?2/6]",
-          database = "monopoly"
+            host="localhost",
+            user="root",
+            password="aDHp8P6?2/6]",
+            database="monopoly"
         )
         return mydb
     
-        except mysql.connector.Error as e:
+    def __init__(self, host="localhost", user="root", password="aDHp8P6?2/6]", database="monopoly"):
+        if not MYSQL_AVAILABLE:
+            print("⚠️ mysql-connector-python n'est pas installé")
+            print("   Installez-le avec: pip install mysql-connector-python")
+        self.config = {
+            'host': host,
+            'user': user,
+            'password': password,
+            'database': database
+        }
+        self.connection = None
+    
+    def connect(self):
+        if not MYSQL_AVAILABLE:
+            return False
+        try:
+            self.connection = mysql.connector.connect(**self.config)
+            return True
+        except Exception as e:
             print(f"Erreur de connexion à la base de données: {e}")
             return False
     
@@ -53,7 +79,7 @@ class DB:
                 proprietes.append(prop)
             
             cursor.close()
-        except mysql.connector.Error as e:
+        except Exception as e:
             print(f"Erreur lors du chargement des propriétés: {e}")
         
         return proprietes
