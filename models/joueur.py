@@ -30,6 +30,10 @@ class Joueur:
         return passage_par_depart
     
     def payer(self, montant: int, beneficiaire: Optional['Joueur'] = None):
+        jeu = getattr(self, 'jeu', None)
+        if jeu and hasattr(jeu, 'stats'):
+            jeu.stats.enregistrer_depense(self, montant)
+        
         if self.argent >= montant:
             self.argent -= montant
             if beneficiaire:
@@ -122,6 +126,9 @@ class Joueur:
         self.en_prison = True
         self.tours_en_prison = 0
         self.doubles_consecutifs = 0
+        jeu = getattr(self, 'jeu', None)
+        if jeu and hasattr(jeu, 'stats'):
+            jeu.stats.enregistrer_prison(self)
     
     def sortir_prison(self, montant: int = 50):
         if not self.en_prison:
@@ -142,6 +149,9 @@ class Joueur:
     
     def recevoir(self, montant: int):
         self.argent += montant
+        jeu = getattr(self, 'jeu', None)
+        if jeu and hasattr(jeu, 'stats'):
+            jeu.stats.enregistrer_revenu(self, montant)
     
     def acheter_propriete(self, propriete: 'Propriete') -> bool:
         if propriete.proprietaire is not None:
@@ -153,6 +163,10 @@ class Joueur:
         self.argent -= propriete.prix
         propriete.proprietaire = self
         self.proprietes.append(propriete)
+        
+        jeu = getattr(self, 'jeu', None)
+        if jeu and hasattr(jeu, 'stats'):
+            jeu.stats.enregistrer_achat(self)
         
         return True
     

@@ -115,6 +115,9 @@ class Propriete(Case):
 
         if jeu and getattr(jeu, 'houses_available', None) is not None:
             jeu.houses_available -= 1
+        
+        if jeu and hasattr(jeu, 'stats'):
+            jeu.stats.enregistrer_construction(joueur)
 
         return True
     
@@ -272,8 +275,10 @@ class CaseSpeciale(Case):
         elif self.type_case == "chance":
             carte = jeu.cartes_chance.piocher()
             print(f"CHANCE {joueur.nom} pioche une Chance: {carte.description}")
+            jeu.stats.enregistrer_carte('chance')
             carte.execute(joueur, jeu)
         elif self.type_case == "caisse":
             carte = jeu.cartes_communaute.piocher()
             print(f"CAISSE {joueur.nom} pioche une Caisse: {carte.description}")
+            jeu.stats.enregistrer_carte('communaute')
             carte.execute(joueur, jeu)

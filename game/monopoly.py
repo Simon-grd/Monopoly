@@ -289,6 +289,7 @@ class Monopoly:
         
         if a_un_double:
             joueur.doubles_consecutifs += 1
+            self.stats.enregistrer_double(joueur)
             if joueur.doubles_consecutifs >= 3:
                 print(f"{Icons.WARNING} {colorize(f'{joueur.nom} a 3 doubles consecutifs ! Va en prison !', Colors.RED)}")
                 joueur.aller_en_prison()
@@ -374,6 +375,9 @@ class Monopoly:
             
             if self.joueur_actuel_index == 0:
                 self.tour_numero += 1
+                for j in self.joueurs:
+                    if not j.est_en_faillite:
+                        self.stats.enregistrer_argent_joueur(j)
                 if self.tour_numero % 10 == 0:
                     actifs = sum(1 for j in self.joueurs if not j.est_en_faillite)
                     faillites = len(self.joueurs) - actifs
@@ -381,6 +385,10 @@ class Monopoly:
 
         self.stats.nb_tours = self.tour_numero
         self.stats.gagnant = self.obtenir_gagnant()
+        
+        for j in self.joueurs:
+            if not j.est_en_faillite:
+                self.stats.enregistrer_argent_joueur(j)
         
         self._afficher_resultat_final()
         return self.obtenir_gagnant()
