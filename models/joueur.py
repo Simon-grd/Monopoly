@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from models.case import Propriete
 
 class Joueur:
-    def __init__(self, nom: str, argent_initial: int = 1500):
+    def __init__(self, nom: str, argent_initial: int = 1500, strategie=None):
         self.nom = nom
         self.argent = argent_initial
         self.position = 0
@@ -15,6 +15,8 @@ class Joueur:
         self.est_en_faillite = False
         self.doubles_consecutifs = 0
         self.cartes_liberte = 0
+        self.strategie = strategie
+        self.est_ia = strategie is not None
     
     def deplacer(self, nombre_cases: int, plateau_taille: int = 40) -> bool:
         ancienne_position = self.position
@@ -52,7 +54,6 @@ class Joueur:
         montant_collecte = 0
         jeu = getattr(self, 'jeu', None)
 
-        # 1) Vendre les maisons uniformément
         from models.case import Propriete
         quartiers = defaultdict(list)
         for p in self.proprietes:
@@ -78,7 +79,6 @@ class Joueur:
                 if montant_collecte >= montant_necessaire:
                     return montant_collecte
 
-        # 2) Vendre les hôtels
         for prop in list(self.proprietes):
             if montant_collecte >= montant_necessaire:
                 break
@@ -93,7 +93,6 @@ class Joueur:
                 if jeu and getattr(jeu, 'hotels_available', None) is not None:
                     jeu.hotels_available += 1
 
-        # 3) Hypothéquer les propriétés restantes
         for prop in list(self.proprietes):
             if montant_collecte >= montant_necessaire:
                 break
@@ -157,5 +156,17 @@ class Joueur:
         
         return True
     
-    def possede_quartier(self, couleur: str, toutes_proprietes: List['Propriete']) -> bool:
-        pass
+    def possede_quartier_complet(self, couleur: str) -> bool:
+        """Vérifie si le joueur possède un quartier complet"""
+        couleurs_map = {
+            "marron": 2, "bleu clair": 3, "rose": 3, "orange": 3,
+            "rouge": 3, "jaune": 3, "vert": 3, "bleu foncé": 2
+        }
+        
+        if couleur not in couleurs_map:
+            return False
+        
+        from models.case import Propriete
+        proprietes_couleur = [p for p in self.proprietes 
+                             if isinstance(p, Propriete) and hasattr(p, 'couleur') and p.couleur == couleur]
+        return len(proprietes_couleur) == couleurs_map[couleur]

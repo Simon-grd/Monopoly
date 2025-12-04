@@ -217,21 +217,31 @@ class Propriete(Case):
     def action(self, joueur: 'Joueur', jeu: 'Monopoly'):
         if self.proprietaire is None:
             if joueur.argent >= self.prix:
-                response = input(f"Veux-tu acheter {self.nom} pour {self.prix}€? (oui/non): ").lower().strip()
-                if response == "oui":
-                    joueur.acheter_propriete(self)
-                    print(f"✓ {joueur.nom} achète {self.nom} pour {self.prix}€")
+                if joueur.est_ia and joueur.strategie:
+                    decision = joueur.strategie.decider_achat(joueur, self)
+                    if decision:
+                        joueur.acheter_propriete(self)
+                        print(f"OK IA {joueur.nom} achete {self.nom} pour {self.prix}€")
+                    else:
+                        print(f"NON IA {joueur.nom} refuse d'acheter {self.nom}")
                 else:
-                    print(f"✗ {joueur.nom} refuse d'acheter {self.nom}")
+                    response = input(f"Veux-tu acheter {self.nom} pour {self.prix}€? (oui/non): ").lower().strip()
+                    if response == "oui":
+                        joueur.acheter_propriete(self)
+                        print(f"OK {joueur.nom} achete {self.nom} pour {self.prix}€")
+                    else:
+                        print(f"NON {joueur.nom} refuse d'acheter {self.nom}")
             else:
-                print(f"✗ {joueur.nom} n'a pas assez d'argent pour {self.nom} ({self.prix}€)")
+                print(f"NON {joueur.nom} n'a pas assez d'argent pour {self.nom} ({self.prix}€)")
         elif self.proprietaire != joueur:
             if self.proprietaire.en_prison:
-                print(f"→ {self.proprietaire.nom} est en prison et ne touche pas le loyer")
+                print(f"-> {self.proprietaire.nom} est en prison et ne touche pas le loyer")
             else:
                 loyer = self.calculer_loyer()
                 if loyer > 0:
-                    print(f"→ {joueur.nom} paie {loyer}€ à {self.proprietaire.nom} pour {self.nom}")
+                    print(f"-> {joueur.nom} paie {loyer}€ a {self.proprietaire.nom} pour {self.nom}")
+
+                    jeu.stats.enregistrer_loyer(self, loyer)
                     joueur.payer(loyer, self.proprietaire)
 
 class CaseSpeciale(Case):
@@ -242,28 +252,28 @@ class CaseSpeciale(Case):
     def action(self, joueur: 'Joueur', jeu: 'Monopoly'):
         if self.type_case == "impot":
             montant = 200
-            print(f"💸 {joueur.nom} paie l'impôt: {montant}€")
+            print(f"IMPOT {joueur.nom} paie l'impot: {montant}€")
             joueur.payer(montant, None)
         elif self.type_case == "taxe_luxe":
             montant = 100
-            print(f"💸 {joueur.nom} paie la taxe de luxe: {montant}€")
+            print(f"TAXE {joueur.nom} paie la taxe de luxe: {montant}€")
             joueur.payer(montant, None)
         elif self.type_case == "prison":
             if joueur.tours_en_prison == 0:
-                print(f"👮 {joueur.nom} est en visite à la prison")
+                print(f"VISITE {joueur.nom} est en visite a la prison")
         elif self.type_case == "allez_prison":
-            print(f"👮 {joueur.nom} va en prison!")
+            print(f"PRISON {joueur.nom} va en prison!")
             joueur.aller_en_prison()
         elif self.type_case == "depart":
-            print(f"🏁 {joueur.nom} arrive à la case Départ et reçoit 200€ bonus!")
+            print(f"DEPART {joueur.nom} arrive a la case Depart et recoit 200€ bonus!")
             joueur.recevoir(200)
         elif self.type_case == "parc":
-            print(f"🌳 {joueur.nom} se repose au parc gratuit")
+            print(f"PARC {joueur.nom} se repose au parc gratuit")
         elif self.type_case == "chance":
             carte = jeu.cartes_chance.piocher()
-            print(f"🎰 {joueur.nom} pioche une Chance: {carte.description}")
+            print(f"CHANCE {joueur.nom} pioche une Chance: {carte.description}")
             carte.execute(joueur, jeu)
         elif self.type_case == "caisse":
             carte = jeu.cartes_communaute.piocher()
-            print(f"🎰 {joueur.nom} pioche une Caisse: {carte.description}")
+            print(f"CAISSE {joueur.nom} pioche une Caisse: {carte.description}")
             carte.execute(joueur, jeu)

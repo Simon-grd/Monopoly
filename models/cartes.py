@@ -33,14 +33,14 @@ class PaquetCartes:
         def avancez_depart(j, je):
             j.position = 0
             j.recevoir(200)
-            print(f"✓ {j.nom} avance au Départ et reçoit 200€")
+            print(f"OK {j.nom} avance au Depart et recoit 200€")
 
         def aller_gare_lyon(j, je):
             from models.case import Propriete
             idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Gare de Lyon')
             j.position = idx
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} avance à {case.nom}")
+            print(f"-> {j.nom} avance a {case.nom}")
             case.action(j, je)
 
         def aller_gare_saint_lazare(j, je):
@@ -48,7 +48,7 @@ class PaquetCartes:
             idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Gare Saint-Lazare')
             j.position = idx
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} avance à {case.nom}")
+            print(f"-> {j.nom} avance a {case.nom}")
             case.action(j, je)
 
         def aller_electricite(j, je):
@@ -56,11 +56,11 @@ class PaquetCartes:
             idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == "Compagnie d'Électricité")
             j.position = idx
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} avance à {case.nom}")
+            print(f"-> {j.nom} avance a {case.nom}")
             if case.proprietaire and case.proprietaire != j and not case.proprietaire.en_prison:
                 d1 = random.randint(1,6); d2 = random.randint(1,6)
                 l = case.calculer_loyer_service(d1, d2)
-                print(f"→ {j.nom} paie {l}€ à {case.proprietaire.nom} (service) (dés {d1}+{d2})")
+                print(f"-> {j.nom} paie {l}€ a {case.proprietaire.nom} (service) (des {d1}+{d2})")
                 j.payer(l, case.proprietaire)
             else:
                 case.action(j, je)
@@ -70,27 +70,27 @@ class PaquetCartes:
             idx = next(i for i,c in enumerate(je.plateau.cases) if isinstance(c, Propriete) and c.nom == 'Compagnie des Eaux')
             j.position = idx
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} avance à {case.nom}")
+            print(f"-> {j.nom} avance a {case.nom}")
             if case.proprietaire and case.proprietaire != j and not case.proprietaire.en_prison:
                 d1 = random.randint(1,6); d2 = random.randint(1,6)
                 l = case.calculer_loyer_service(d1, d2)
-                print(f"→ {j.nom} paie {l}€ à {case.proprietaire.nom} (service) (dés {d1}+{d2})")
+                print(f"-> {j.nom} paie {l}€ a {case.proprietaire.nom} (service) (des {d1}+{d2})")
                 j.payer(l, case.proprietaire)
             else:
                 case.action(j, je)
 
         def vous_libere_prison(j, je):
             j.cartes_liberte += 1
-            print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
+            print(f"OK {j.nom} recoit une carte 'Vous etes libere de prison'")
 
         def reculez_3(j, je):
             j.deplacer(-3)
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} recule de 3 cases et arrive à {case.nom}")
+            print(f"-> {j.nom} recule de 3 cases et arrive a {case.nom}")
             case.action(j, je)
 
         def allez_en_prison(j, je):
-            print(f"👮 {j.nom} va en prison !")
+            print(f"PRISON {j.nom} va en prison !")
             j.aller_en_prison()
 
         def reparations(j, je):
@@ -98,7 +98,7 @@ class PaquetCartes:
             total_houses = sum(p.nb_maisons for p in j.proprietes if isinstance(p, Propriete))
             total_hotels = sum(1 for p in j.proprietes if isinstance(p, Propriete) and p.a_hotel)
             montant = total_houses * 25 + total_hotels * 100
-            print(f"💸 {j.nom} paie {montant}€ pour réparations")
+            print(f"REPARATIONS {j.nom} paie {montant}€ pour reparations")
             j.payer(montant, None)
 
         def payez_50(j, je):
@@ -111,30 +111,30 @@ class PaquetCartes:
             idx = next(i for i,c in enumerate(je.plateau.cases) if c.nom == 'Avenue des Champs-Élysées')
             j.position = idx
             case = je.plateau.get_case(j.position)
-            print(f"→ {j.nom} avance à {case.nom}")
+            print(f"-> {j.nom} avance a {case.nom}")
             case.action(j, je)
 
         def gagnez_200(j, je):
             j.recevoir(200)
-            print(f"✓ {j.nom} reçoit 200€")
+            print(f"OK {j.nom} recoit 200€")
 
         def payez_15(j, je):
             j.payer(15, None)
 
         self.cartes = [
-            CarteCommunaute("Avancez au Départ (200€)", avancez_depart),
-            CarteCommunaute("Aller à la Gare de Lyon", aller_gare_lyon),
-            CarteCommunaute("Aller à la Gare Saint-Lazare", aller_gare_saint_lazare),
-            CarteCommunaute("Aller à Électricité", aller_electricite),
-            CarteCommunaute("Aller à l'Eau", aller_eau),
-            CarteCommunaute("Vous êtes libéré de prison", vous_libere_prison),
+            CarteCommunaute("Avancez au Depart (200€)", avancez_depart),
+            CarteCommunaute("Aller a la Gare de Lyon", aller_gare_lyon),
+            CarteCommunaute("Aller a la Gare Saint-Lazare", aller_gare_saint_lazare),
+            CarteCommunaute("Aller a Electricite", aller_electricite),
+            CarteCommunaute("Aller a l'Eau", aller_eau),
+            CarteCommunaute("Vous etes libere de prison", vous_libere_prison),
             CarteCommunaute("Reculez de 3 cases", reculez_3),
             CarteCommunaute("Allez en Prison", allez_en_prison),
-            CarteCommunaute("Faites des réparations: 25€ par maison, 100€ par hôtel", reparations),
+            CarteCommunaute("Faites des reparations: 25€ par maison, 100€ par hotel", reparations),
             CarteCommunaute("Payez 50€ d'amende", payez_50),
             CarteCommunaute("Recevez 50€", recevez_50),
-            CarteCommunaute("Avancez jusqu'aux Champs-Élysées", avancez_champs),
-            CarteCommunaute("Vous avez gagné le gros lot: 200€", gagnez_200),
+            CarteCommunaute("Avancez jusqu'aux Champs-Elysees", avancez_champs),
+            CarteCommunaute("Vous avez gagne le gros lot: 200€", gagnez_200),
             CarteCommunaute("Payez 15€ pour frais scolaires", payez_15),
         ]
     
@@ -142,18 +142,18 @@ class PaquetCartes:
         def avancez_depart(j, je):
             j.position = 0
             j.recevoir(200)
-            print(f"✓ {j.nom} avance au Départ et reçoit 200€")
+            print(f"OK {j.nom} avance au Depart et recoit 200€")
 
         def recevez_200(j, je):
             j.recevoir(200)
-            print(f"✓ {j.nom} reçoit 200€")
+            print(f"OK {j.nom} recoit 200€")
 
         def payez_50_impots(j, je):
             j.payer(50, None)
 
         def vous_libere_prison(j, je):
             j.cartes_liberte += 1
-            print(f"✓ {j.nom} reçoit une carte 'Vous êtes libéré de prison'")
+            print(f"OK {j.nom} recoit une carte 'Vous etes libere de prison'")
 
         def erreur_banque(j, je):
             j.recevoir(100)
@@ -163,7 +163,7 @@ class PaquetCartes:
             for autre in je.joueurs:
                 if autre != j and not autre.est_en_faillite:
                     autre.payer(montant, j)
-            print(f"✓ {j.nom} reçoit 10€ de chaque joueur")
+            print(f"OK {j.nom} recoit 10€ de chaque joueur")
 
         def frais_medecin(j, je):
             j.payer(100, None)
@@ -181,16 +181,16 @@ class PaquetCartes:
             j.payer(50, None)
 
         self.cartes = [
-            CarteCommunaute("Avancez au Départ (200€)", avancez_depart),
+            CarteCommunaute("Avancez au Depart (200€)", avancez_depart),
             CarteCommunaute("Recevez 200€ d'une rente", recevez_200),
-            CarteCommunaute("Payez 50€ d'impôts", payez_50_impots),
-            CarteCommunaute("Vous êtes libéré de prison", vous_libere_prison),
+            CarteCommunaute("Payez 50€ d'impots", payez_50_impots),
+            CarteCommunaute("Vous etes libere de prison", vous_libere_prison),
             CarteCommunaute("Recevez 100€ pour erreur de la banque", erreur_banque),
             CarteCommunaute("C'est votre anniversaire: recevez 10€ de chaque joueur", anniversaire),
-            CarteCommunaute("Payez 100€ pour frais de médecin", frais_medecin),
+            CarteCommunaute("Payez 100€ pour frais de medecin", frais_medecin),
             CarteCommunaute("Allez en Prison", allez_en_prison),
             CarteCommunaute("Recevez 50€", recevez_50),
-            CarteCommunaute("Recevez 100€ d'intérêts", recevez_100),
+            CarteCommunaute("Recevez 100€ d'interets", recevez_100),
             CarteCommunaute("Payez 50€", payez_50),
         ]
     

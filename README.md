@@ -1,6 +1,6 @@
 # Monopoly - Jeu Python
 
-Implémentation complète du jeu Monopoly en Python avec architecture modulaire.
+Implémentation complète du jeu Monopoly en Python avec architecture modulaire et intelligence artificielle.
 
 ## 🎮 Lancer le jeu
 
@@ -8,72 +8,67 @@ Implémentation complète du jeu Monopoly en Python avec architecture modulaire.
 python main.py
 ```
 
-## 📁 Structure du projet
+## 📋 Configuration
+
+- **Joueur 1** : Obligatoirement humain
+- **Joueurs 2-4** : Humain ou IA (Agressive, Conservative, Stratégique)
+- **Total** : 2 à 4 joueurs
+
+### Types d'IA
+
+- **IA Agressive** : Achète systématiquement toutes les propriétés
+- **IA Conservative** : Achète seulement si argent > 2× prix
+- **IA Stratégique** : Privilégie les quartiers complets + construction intelligente
+
+## 📁 Structure
 
 ```
 Monopoly/
-├── models/              # Modèles de données
-│   ├── case.py         # Classes Case, Propriete, CaseSpeciale
-│   ├── joueur.py       # Classe Joueur
-│   ├── plateau.py      # Classe Plateau
-│   ├── cartes.py       # Cartes Chance et Communauté
-│   ├── gare.py         # Classe Gare
-│   ├── compagnie.py    # Classe Compagnie
-│   └── db.py           # Accès base de données (optionnel)
-├── game/               # Logique du jeu
-│   └── monopoly.py     # Classe Monopoly principale
-├── ui/                 # Interface utilisateur
-│   └── terminal.py     # Interface terminal
-├── main.py             # Point d'entrée
-├── tests_seance2.py    # Tests séance 2
-└── tests_seance3.py    # Tests séance 3
+├── models/          # Modèles de données
+│   ├── case.py     # Cases, Propriétés, Cases spéciales
+│   ├── joueur.py   # Joueur
+│   ├── plateau.py  # Plateau
+│   ├── cartes.py   # Cartes Chance et Communauté
+│   ├── gare.py     # Gares
+│   ├── compagnie.py # Compagnies
+│   ├── ia.py       # Stratégies IA
+│   └── statistiques.py # Statistiques de partie
+├── game/           # Logique du jeu
+│   └── monopoly.py # Classe principale
+├── ui/             # Interface utilisateur
+│   └── interface.py # Configuration des joueurs
+└── main.py         # Point d'entrée
 ```
 
 ## ✨ Fonctionnalités
 
-### Séance 1 : Base du jeu
+### Jeu complet
 - ✅ Plateau de 40 cases
 - ✅ Propriétés, gares, compagnies
-- ✅ Déplacement des joueurs
-- ✅ Achat de propriétés
-- ✅ Paiement des loyers
-
-### Séance 2 : Mécanique de jeu
-- ✅ Cases spéciales (Départ, Prison, Taxes, Parc)
+- ✅ Achat et loyers
 - ✅ Construction de maisons et hôtels
-- ✅ Calcul des loyers avec constructions
-- ✅ Gares avec loyers progressifs (25€, 50€, 100€, 200€)
-- ✅ Compagnies avec loyers basés sur les dés (4× ou 10×)
-- ✅ Système de monopole
-
-### Séance 3 : Jouabilité complète
-- ✅ Système de prison complet (3 façons de sortir)
+- ✅ Cases spéciales (Départ, Prison, Taxes, Parc)
 - ✅ Cartes Chance et Caisse de Communauté
+- ✅ Système de prison complet
 - ✅ Gestion des faillites
-- ✅ Partie complète avec élimination
-- ✅ Accès base de données MySQL (optionnel)
+
+### Intelligence Artificielle
+- ✅ 3 stratégies d'IA distinctes
+- ✅ Décisions d'achat automatiques
+- ✅ Construction intelligente (IA Stratégique)
+- ✅ Parties mixtes humains/IA
+
+### Statistiques
+- ✅ Cases les plus visitées
+- ✅ Propriétés les plus rentables
+- ✅ Durée des parties
+- ✅ Identification du gagnant
 
 ## 🧪 Tests
 
 ```bash
-# Tests séance 2
-python tests_seance2.py
-
-# Tests séance 3
-python tests_seance3.py
+python tests_seance4.py
 ```
-
-## 🗄️ Base de données (optionnel)
-
-### Installation
-```bash
-pip install mysql-connector-python
-```
-
-### Configuration
-1. Créer la base `monopoly`
-2. Créer l'utilisateur `monopoly_user` / `monopoly_pass`
-3. Exécuter le script SQL fourni
 
 ## 🎯 Commandes du jeu
 
@@ -94,7 +89,3 @@ pip install mysql-connector-python
 - Loyers doublés sur monopole sans construction
 - Faillite avec transfert des propriétés
 - 32 maisons et 12 hôtels disponibles
-
-## 👥 Auteurs
-
-Projet réalisé dans le cadre du TP Monopoly
